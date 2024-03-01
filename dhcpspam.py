@@ -1,12 +1,8 @@
 #!/usr/bin/python3
-import sys
-sys.path.append('/usr/local/lib/python3.11/site-packages/scapy')
 import scapy.all as scapy
-from scapy.all import Ether, IP, UDP, BOOTP, DHCP, sendp, RandMac, conf
-from scapy.layers.l2 import Ether
+from scapy.all import Ether, IP, UDP, BOOTP, DHCP, sendp, RandMAC, conf
 from time import sleep
 import ipaddress
-
 # conf.checkIPaddr needs to be set to False, since answer will only be accepted by scapy whe it is
 # it makes it so IPs dont have to be swapped to count as a response
 
@@ -19,7 +15,7 @@ possible_ips = [str(ip) for ip in ipaddress.IPv4Network('192.168.1.0/24')]
 
 for ip_add in possible_ips:
     # RandMAC() for random mac address
-    realHostMAC = RandMac()
+    realHostMAC = RandMAC()
 
     # build discover packet
     broadcast = Ether(

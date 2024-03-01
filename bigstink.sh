@@ -1,7 +1,5 @@
 #!/bin/bash
 
-#!/bin/bash
-
 #Big stink is a wrapper for several tools in the Kali suite, intended to streamline pentesting and make it easier for newer pentesters 
 
 RED='\033[0;31m'
@@ -52,6 +50,7 @@ while [ "${userIn}" != "quit" ]; do
 		echo "portscan" 
 		echo "asreproast"
 		echo "kerbroast"
+		echo "dhcpstarve"
 		echo
 
 	elif [ "${userIn}" == "asreproast" ]; then
