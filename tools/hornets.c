@@ -4,7 +4,7 @@
 #include <time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netinet/ip.h> 
+#include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <pthread.h>
@@ -175,9 +175,13 @@ void *send_tcp_packet(unsigned short dport) {
     pthread_exit(NULL);
 }
 
-void *spam(void *tid){
+void *spam(int port){
 
-    send_tcp_packet()
+	while(true){
+
+		send_tcp_packet(port);
+
+	}
 
 }
 
@@ -189,17 +193,17 @@ int main() {
 	int open_ports[] = {80, 443, 8080, 22, 21};
 
 
-    	pthread_t threads[NUM_THREADS];
+    	pthread_t threads[lengtharray];
     	int rc; //return code
     	long t; //thread
 
 	while(!quit_flag){
 
-		for (t = 0; t < ; t++) {
+		for (t = 0; t < lenghtarray; t++) {
 
 			printf("Creating thread %ld\n", t);
 
-			rc = pthread_create(&threads[t], NULL, send_tcp_packet, (void *)t);
+			rc = pthread_create(&threads[t], NULL, spam, open_ports[t]);
 
         		if (rc) {
 
@@ -212,7 +216,7 @@ int main() {
 	}
 
     // Wait for all threads to complete
-    for (t = 0; t < NUM_THREADS; t++) {
+    for (t = 0; t < lengtharray; t++) {
 
         pthread_join(threads[t], NULL);
 
