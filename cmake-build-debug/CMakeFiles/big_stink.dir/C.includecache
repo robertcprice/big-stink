@@ -1,0 +1,42 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/Users/bobbyprice/tools/wip/big-stink/tools/hornets.c
+stdio.h
+-
+stdlib.h
+-
+string.h
+-
+time.h
+-
+signal.h
+-
+sys/socket.h
+-
+netinet/in.h
+-
+netinet/ip.h
+-
+netinet/tcp.h
+-
+arpa/inet.h
+-
+pthread.h
+-
+
+/Users/bobbyprice/tools/wip/big-stink/tools/thumper.c
+stdio.h
+-
+stdlib.h
+-
+string.h
+-
+pthread.h
+-
+
