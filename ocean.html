@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASCII Ocean Waves</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a1a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #ocean {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    line-height: 1.15;
+    color: #4a9eda;
+    white-space: pre;
+    letter-spacing: 1px;
+    text-shadow: 0 0 8px rgba(74, 158, 218, 0.3);
+    user-select: none;
+  }
+  h1 {
+    font-family: 'Courier New', Courier, monospace;
+    color: #1a3a5c;
+    margin-bottom: 10px;
+    font-size: 12px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+<h1>~ ascii ocean ~</h1>
+<div id="ocean"></div>
+<script>
+const COLS = 100;
+const ROWS = 38;
+const el = document.getElementById('ocean');
+
+// Characters from deep water to foam
+const deepChars   = [' ', ' ', '.', '.', '·'];
+const midChars    = ['~', '~', '~', '-', '=', '≈'];
+const surfChars   = ['≈', '≋', '∽', '∿', '~'];
+const foamChars   = ["'", '"', '`', '*', '°', '˚'];
+const washChars   = ['.', ',', '·', ':', ';', "'"];
+const sandChars   = ['▓', '▒', '░', '▒', '▓'];
+
+// Color palette (CSS color strings)
+const deepColors   = ['#0b2545', '#0d3060', '#0f3b7a'];
+const midColors    = ['#1a5a8a', '#2070a0', '#2888bb'];
+const surfColors   = ['#3a9fd8', '#50b0e8', '#6ac4f0'];
+const foamColors   = ['#c8e6f5', '#dff0fa', '#ffffff'];
+const washColors   = ['#8ab8d0', '#a0cce0', '#b8ddef'];
+const sandColors   = ['#c2a878', '#b89860', '#d4bc8a'];
+
+let t = 0;
+
+function pick(arr, i) {
+  return arr[Math.abs(i) % arr.length];
+}
+
+function noise(x, y, time) {
+  // Layered sine waves for organic motion
+  let v = 0;
+  v += Math.sin(x * 0.07 + time * 0.6) * 1.0;
+  v += Math.sin(x * 0.13 - time * 0.4 + y * 0.1) * 0.7;
+  v += Math.sin(x * 0.21 + time * 0.9 + y * 0.05) * 0.4;
+  v += Math.sin(y * 0.3 + time * 0.3) * 0.5;
+  v += Math.sin((x + y) * 0.05 + time * 0.2) * 0.8;
+  return v;
+}
+
+function render(time) {
+  let lines = [];
+
+  // Shore position oscillates gently
+  const shoreBase = ROWS * 0.78;
+  const shoreWave = Math.sin(time * 0.15) * 2;
+
+  for (let y = 0; y < ROWS; y++) {
+    let line = '';
+    let colorLine = [];
+
+    // Determine zone: sky gap, deep, mid, surf, foam/wash, sand
+    const rowRatio = y / ROWS;
+
+    for (let x = 0; x < COLS; x++) {
+      const n = noise(x, y, time);
+      const shoreOffset = Math.sin(x * 0.05 + time * 0.2) * 3 + shoreWave;
+      const shoreY = shoreBase + shoreOffset;
+
+      // Wash zone: water creeping up the sand
+      const washExtent = Math.sin(time * 0.3 + x * 0.04) * 2.5 + Math.sin(time * 0.7) * 1.5;
+      const washY = shoreY + washExtent + 1;
+
+      let ch, color;
+
+      if (y < ROWS * 0.08) {
+        // Horizon / sky sliver
+        const starChance = Math.sin(x * 7.7 + y * 13.3 + time * 0.1);
+        if (starChance > 0.97) {
+          ch = '.';
+          color = '#445566';
+        } else {
+          ch = ' ';
+          color = '#0a0a1a';
+        }
+      } else if (y < ROWS * 0.15) {
+        // Distant horizon waves - very subtle
+        const hn = Math.sin(x * 0.1 + time * 0.3) + Math.sin(x * 0.23 - time * 0.2) * 0.5;
+        if (hn > 0.8) {
+          ch = pick(midChars, x + Math.floor(time * 2));
+          color = pick(deepColors, x);
+        } else {
+          ch = pick(deepChars, Math.floor(n * 10 + x));
+          color = pick(deepColors, Math.floor(n * 3));
+        }
+      } else if (y < ROWS * 0.4) {
+        // Deep water
+        const intensity = n * 0.5 + 0.5;
+        if (intensity > 0.75) {
+          ch = pick(midChars, Math.floor(n * 10 + x + time * 3));
+          color = pick(midColors, Math.floor(n * 5));
+        } else if (intensity > 0.4) {
+          ch = pick(deepChars, Math.floor(n * 8 + x));
+          color = pick(deepColors, Math.floor(n * 4));
+        } else {
+          ch = ' ';
+          color = '#0a0a1a';
+        }
+      } else if (y < shoreY - 4) {
+        // Mid water - more active
+        const wave = noise(x, y, time);
+        const intensity = wave * 0.5 + 0.5;
+        if (intensity > 0.7) {
+          ch = pick(surfChars, Math.floor(wave * 10 + x + time * 5));
+          color = pick(surfColors, Math.floor(wave * 5));
+        } else if (intensity > 0.35) {
+          ch = pick(midChars, Math.floor(wave * 8 + x + time * 3));
+          color = pick(midColors, Math.floor(wave * 4));
+        } else {
+          ch = pick(deepChars, Math.floor(wave * 6 + x));
+          color = pick(deepColors, Math.floor(wave * 3));
+        }
+      } else if (y < shoreY) {
+        // Surf zone - breaking waves
+        const surfN = noise(x * 1.5, y, time * 1.4);
+        const breakPhase = Math.sin(x * 0.08 + time * 0.8 - y * 0.3);
+        const closeness = 1 - (shoreY - y) / 4;
+
+        if (breakPhase > 0.3 && closeness > 0.4) {
+          ch = pick(foamChars, Math.floor(surfN * 10 + time * 6));
+          color = pick(foamColors, Math.floor(surfN * 4));
+        } else if (surfN > 0) {
+          ch = pick(surfChars, Math.floor(surfN * 10 + x + time * 4));
+          color = pick(surfColors, Math.floor(surfN * 5));
+        } else {
+          ch = pick(midChars, Math.floor(surfN * 6 + x));
+          color = pick(midColors, Math.floor(surfN * 3 + 1));
+        }
+      } else if (y < washY) {
+        // Wash zone - thin water on sand
+        const washN = noise(x * 1.2, y * 2, time * 1.2);
+        const fade = 1 - (y - shoreY) / (washY - shoreY);
+        if (fade > 0.5 && washN > -0.3) {
+          ch = pick(washChars, Math.floor(washN * 10 + time * 4));
+          color = pick(washColors, Math.floor(washN * 3 + fade * 2));
+        } else if (fade > 0.2) {
+          ch = pick(['.', ' ', '·', ' '], Math.floor(washN * 5 + x));
+          color = pick(washColors, 2);
+        } else {
+          ch = pick(sandChars, Math.floor(x * 0.3 + y));
+          color = pick(sandColors, Math.floor(x * 0.2));
+        }
+      } else {
+        // Sand
+        const sandN = Math.sin(x * 0.5 + y * 0.8) * 0.5 + 0.5;
+        const idx = Math.floor(sandN * sandChars.length);
+        ch = sandChars[Math.min(idx, sandChars.length - 1)];
+        color = pick(sandColors, Math.floor(sandN * 3 + y));
+      }
+
+      line += ch;
+      colorLine.push(color);
+    }
+
+    lines.push({ text: line, colors: colorLine });
+  }
+
+  // Build colored output using spans
+  let html = '';
+  for (const row of lines) {
+    let span = '';
+    let currentColor = null;
+    for (let i = 0; i < row.text.length; i++) {
+      if (row.colors[i] !== currentColor) {
+        if (currentColor !== null) span += '</span>';
+        currentColor = row.colors[i];
+        span += `<span style="color:${currentColor}">`;
+      }
+      const c = row.text[i];
+      span += c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : c;
+    }
+    if (currentColor !== null) span += '</span>';
+    html += span + '\n';
+  }
+
+  el.innerHTML = html;
+}
+
+function loop() {
+  t += 0.04;
+  render(t);
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
