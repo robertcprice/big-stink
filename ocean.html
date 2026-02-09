@@ -3,211 +3,260 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ASCII Ocean Waves</title>
+<title>ASCII Ocean - 3D Perspective</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #0a0a1a;
+    background: #000;
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
-    flex-direction: column;
     overflow: hidden;
   }
   #ocean {
     font-family: 'Courier New', Courier, monospace;
-    font-size: 14px;
-    line-height: 1.15;
-    color: #4a9eda;
+    font-size: 13px;
+    line-height: 1.1;
     white-space: pre;
     letter-spacing: 1px;
-    text-shadow: 0 0 8px rgba(74, 158, 218, 0.3);
     user-select: none;
-  }
-  h1 {
-    font-family: 'Courier New', Courier, monospace;
-    color: #1a3a5c;
-    margin-bottom: 10px;
-    font-size: 12px;
-    letter-spacing: 4px;
-    text-transform: uppercase;
   }
 </style>
 </head>
 <body>
-<h1>~ ascii ocean ~</h1>
 <div id="ocean"></div>
 <script>
-const COLS = 100;
-const ROWS = 38;
+const COLS = 120;
+const ROWS = 50;
 const el = document.getElementById('ocean');
 
-// Characters from deep water to foam
-const deepChars   = [' ', ' ', '.', '.', '·'];
-const midChars    = ['~', '~', '~', '-', '=', '≈'];
-const surfChars   = ['≈', '≋', '∽', '∿', '~'];
-const foamChars   = ["'", '"', '`', '*', '°', '˚'];
-const washChars   = ['.', ',', '·', ':', ';', "'"];
-const sandChars   = ['▓', '▒', '░', '▒', '▓'];
+const HORIZON = Math.floor(ROWS * 0.38);
+const CAM_HEIGHT = 3.0;
+const FOCAL = 60.0;
 
-// Color palette (CSS color strings)
-const deepColors   = ['#0b2545', '#0d3060', '#0f3b7a'];
-const midColors    = ['#1a5a8a', '#2070a0', '#2888bb'];
-const surfColors   = ['#3a9fd8', '#50b0e8', '#6ac4f0'];
-const foamColors   = ['#c8e6f5', '#dff0fa', '#ffffff'];
-const washColors   = ['#8ab8d0', '#a0cce0', '#b8ddef'];
-const sandColors   = ['#c2a878', '#b89860', '#d4bc8a'];
+// Wave height function - multiple octaves of sine for realism
+function waveHeight(wx, wz, t) {
+  let h = 0;
+  // Primary swell - long rolling waves coming towards viewer
+  h += Math.sin(wz * 0.4 + t * 0.8) * 1.0;
+  h += Math.sin(wz * 0.15 + wx * 0.05 + t * 0.5) * 0.6;
+  // Cross waves
+  h += Math.sin(wx * 0.3 + wz * 0.2 - t * 0.6) * 0.35;
+  h += Math.sin(wx * 0.12 - t * 0.3) * 0.2;
+  // High-frequency chop
+  h += Math.sin(wx * 0.8 + wz * 0.9 + t * 1.5) * 0.15;
+  h += Math.sin(wx * 1.5 - wz * 0.7 + t * 2.0) * 0.08;
+  return h;
+}
+
+// Derivative for "slope" (used for lighting/char selection)
+function waveSlope(wx, wz, t) {
+  const eps = 0.3;
+  const hL = waveHeight(wx - eps, wz, t);
+  const hR = waveHeight(wx + eps, wz, t);
+  const hF = waveHeight(wx, wz - eps, t);
+  const hB = waveHeight(wx, wz + eps, t);
+  return { dx: (hR - hL) / (2 * eps), dz: (hB - hF) / (2 * eps) };
+}
+
+function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }
+
+function lerpColor(c1, c2, t) {
+  t = Math.max(0, Math.min(1, t));
+  return [
+    Math.round(lerp(c1[0], c2[0], t)),
+    Math.round(lerp(c1[1], c2[1], t)),
+    Math.round(lerp(c1[2], c2[2], t))
+  ];
+}
+
+// Sky gradient colors [r,g,b]
+const SKY_TOP    = [5, 5, 20];
+const SKY_MID    = [15, 20, 50];
+const SKY_HORIZ  = [40, 55, 85];
+
+// Water color palette
+const WATER_DEEP   = [8, 30, 60];
+const WATER_MID    = [20, 70, 120];
+const WATER_LIGHT  = [50, 140, 200];
+const WATER_BRIGHT = [100, 190, 240];
+const FOAM_COLOR   = [210, 235, 250];
+const WHITE        = [255, 255, 255];
+
+// Characters by "energy" / slope
+const FLAT_CHARS    = [' ', ' ', '.', '·', ' ', '.'];
+const GENTLE_CHARS  = ['~', '~', '-', '~', '≈', '-'];
+const MEDIUM_CHARS  = ['≈', '∿', '~', '≈', '∽', '≋'];
+const STEEP_CHARS   = ['▓', '▒', '░', '█', '▓', '▒'];
+const CREST_CHARS   = ["'", '"', '`', '^', '°', '*'];
+const FOAM_CHARS    = ['░', '▒', '·', ':', '.', "'"];
 
 let t = 0;
 
-function pick(arr, i) {
-  return arr[Math.abs(i) % arr.length];
-}
-
-function noise(x, y, time) {
-  // Layered sine waves for organic motion
-  let v = 0;
-  v += Math.sin(x * 0.07 + time * 0.6) * 1.0;
-  v += Math.sin(x * 0.13 - time * 0.4 + y * 0.1) * 0.7;
-  v += Math.sin(x * 0.21 + time * 0.9 + y * 0.05) * 0.4;
-  v += Math.sin(y * 0.3 + time * 0.3) * 0.5;
-  v += Math.sin((x + y) * 0.05 + time * 0.2) * 0.8;
-  return v;
-}
-
 function render(time) {
-  let lines = [];
-
-  // Shore position oscillates gently
-  const shoreBase = ROWS * 0.78;
-  const shoreWave = Math.sin(time * 0.15) * 2;
-
-  for (let y = 0; y < ROWS; y++) {
-    let line = '';
-    let colorLine = [];
-
-    // Determine zone: sky gap, deep, mid, surf, foam/wash, sand
-    const rowRatio = y / ROWS;
-
-    for (let x = 0; x < COLS; x++) {
-      const n = noise(x, y, time);
-      const shoreOffset = Math.sin(x * 0.05 + time * 0.2) * 3 + shoreWave;
-      const shoreY = shoreBase + shoreOffset;
-
-      // Wash zone: water creeping up the sand
-      const washExtent = Math.sin(time * 0.3 + x * 0.04) * 2.5 + Math.sin(time * 0.7) * 1.5;
-      const washY = shoreY + washExtent + 1;
-
-      let ch, color;
-
-      if (y < ROWS * 0.08) {
-        // Horizon / sky sliver
-        const starChance = Math.sin(x * 7.7 + y * 13.3 + time * 0.1);
-        if (starChance > 0.97) {
-          ch = '.';
-          color = '#445566';
-        } else {
-          ch = ' ';
-          color = '#0a0a1a';
-        }
-      } else if (y < ROWS * 0.15) {
-        // Distant horizon waves - very subtle
-        const hn = Math.sin(x * 0.1 + time * 0.3) + Math.sin(x * 0.23 - time * 0.2) * 0.5;
-        if (hn > 0.8) {
-          ch = pick(midChars, x + Math.floor(time * 2));
-          color = pick(deepColors, x);
-        } else {
-          ch = pick(deepChars, Math.floor(n * 10 + x));
-          color = pick(deepColors, Math.floor(n * 3));
-        }
-      } else if (y < ROWS * 0.4) {
-        // Deep water
-        const intensity = n * 0.5 + 0.5;
-        if (intensity > 0.75) {
-          ch = pick(midChars, Math.floor(n * 10 + x + time * 3));
-          color = pick(midColors, Math.floor(n * 5));
-        } else if (intensity > 0.4) {
-          ch = pick(deepChars, Math.floor(n * 8 + x));
-          color = pick(deepColors, Math.floor(n * 4));
-        } else {
-          ch = ' ';
-          color = '#0a0a1a';
-        }
-      } else if (y < shoreY - 4) {
-        // Mid water - more active
-        const wave = noise(x, y, time);
-        const intensity = wave * 0.5 + 0.5;
-        if (intensity > 0.7) {
-          ch = pick(surfChars, Math.floor(wave * 10 + x + time * 5));
-          color = pick(surfColors, Math.floor(wave * 5));
-        } else if (intensity > 0.35) {
-          ch = pick(midChars, Math.floor(wave * 8 + x + time * 3));
-          color = pick(midColors, Math.floor(wave * 4));
-        } else {
-          ch = pick(deepChars, Math.floor(wave * 6 + x));
-          color = pick(deepColors, Math.floor(wave * 3));
-        }
-      } else if (y < shoreY) {
-        // Surf zone - breaking waves
-        const surfN = noise(x * 1.5, y, time * 1.4);
-        const breakPhase = Math.sin(x * 0.08 + time * 0.8 - y * 0.3);
-        const closeness = 1 - (shoreY - y) / 4;
-
-        if (breakPhase > 0.3 && closeness > 0.4) {
-          ch = pick(foamChars, Math.floor(surfN * 10 + time * 6));
-          color = pick(foamColors, Math.floor(surfN * 4));
-        } else if (surfN > 0) {
-          ch = pick(surfChars, Math.floor(surfN * 10 + x + time * 4));
-          color = pick(surfColors, Math.floor(surfN * 5));
-        } else {
-          ch = pick(midChars, Math.floor(surfN * 6 + x));
-          color = pick(midColors, Math.floor(surfN * 3 + 1));
-        }
-      } else if (y < washY) {
-        // Wash zone - thin water on sand
-        const washN = noise(x * 1.2, y * 2, time * 1.2);
-        const fade = 1 - (y - shoreY) / (washY - shoreY);
-        if (fade > 0.5 && washN > -0.3) {
-          ch = pick(washChars, Math.floor(washN * 10 + time * 4));
-          color = pick(washColors, Math.floor(washN * 3 + fade * 2));
-        } else if (fade > 0.2) {
-          ch = pick(['.', ' ', '·', ' '], Math.floor(washN * 5 + x));
-          color = pick(washColors, 2);
-        } else {
-          ch = pick(sandChars, Math.floor(x * 0.3 + y));
-          color = pick(sandColors, Math.floor(x * 0.2));
-        }
-      } else {
-        // Sand
-        const sandN = Math.sin(x * 0.5 + y * 0.8) * 0.5 + 0.5;
-        const idx = Math.floor(sandN * sandChars.length);
-        ch = sandChars[Math.min(idx, sandChars.length - 1)];
-        color = pick(sandColors, Math.floor(sandN * 3 + y));
-      }
-
-      line += ch;
-      colorLine.push(color);
-    }
-
-    lines.push({ text: line, colors: colorLine });
-  }
-
-  // Build colored output using spans
   let html = '';
-  for (const row of lines) {
-    let span = '';
-    let currentColor = null;
-    for (let i = 0; i < row.text.length; i++) {
-      if (row.colors[i] !== currentColor) {
-        if (currentColor !== null) span += '</span>';
-        currentColor = row.colors[i];
-        span += `<span style="color:${currentColor}">`;
+
+  for (let row = 0; row < ROWS; row++) {
+    let lineChars = [];
+
+    if (row <= HORIZON) {
+      // === SKY ===
+      const skyT = row / HORIZON;
+      let skyColor;
+      if (skyT < 0.5) {
+        skyColor = lerpColor(SKY_TOP, SKY_MID, skyT * 2);
+      } else {
+        skyColor = lerpColor(SKY_MID, SKY_HORIZ, (skyT - 0.5) * 2);
       }
-      const c = row.text[i];
-      span += c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : c;
+
+      for (let col = 0; col < COLS; col++) {
+        let ch = ' ';
+        let color = skyColor;
+
+        // Stars
+        const starSeed = Math.sin(col * 127.1 + row * 311.7) * 43758.5453;
+        const starVal = starSeed - Math.floor(starSeed);
+        if (starVal > 0.992 && skyT < 0.7) {
+          const twinkle = Math.sin(time * 0.5 + col * 3.7 + row * 2.3) * 0.5 + 0.5;
+          const bright = Math.floor(80 + twinkle * 120);
+          ch = starVal > 0.997 ? '*' : '.';
+          color = [bright, bright, Math.min(255, bright + 40)];
+        }
+
+        // Moon glow near upper right
+        const moonX = COLS * 0.75, moonY = HORIZON * 0.25;
+        const moonDist = Math.sqrt((col - moonX) ** 2 + (row - moonY) ** 2);
+        if (moonDist < 2) {
+          ch = moonDist < 1 ? 'O' : '·';
+          color = [220, 220, 200];
+        } else if (moonDist < 10) {
+          const glow = 1 - moonDist / 10;
+          color = lerpColor(skyColor, [60, 60, 80], glow * 0.4);
+        }
+
+        // Horizon glow
+        if (row >= HORIZON - 2) {
+          const glowT = 1 - (HORIZON - row) / 2;
+          const horizGlow = Math.sin(col * 0.05 + time * 0.1) * 0.1 + 0.15;
+          color = lerpColor(color, [60, 70, 100], glowT * horizGlow);
+        }
+
+        lineChars.push({ ch, color });
+      }
+
+    } else {
+      // === WATER (3D perspective raycasted) ===
+      const screenDist = row - HORIZON;
+      const worldZ = (CAM_HEIGHT * FOCAL) / screenDist;
+      const perspScale = worldZ / FOCAL;
+
+      for (let col = 0; col < COLS; col++) {
+        const worldX = (col - COLS / 2) * perspScale;
+
+        const h = waveHeight(worldX, worldZ, time);
+        const slope = waveSlope(worldX, worldZ, time);
+        const slopeMag = Math.sqrt(slope.dx ** 2 + slope.dz ** 2);
+
+        // Wave displaces the row slightly (parallax)
+        const displaced = h * (1.0 / (1 + worldZ * 0.05));
+
+        // Distance fog factor (0=close, 1=far)
+        const distFog = Math.min(1, worldZ / 80);
+
+        // Fresnel-ish: steeper angle at distance = more reflective
+        const fresnel = Math.min(1, 0.3 + distFog * 0.7);
+
+        // Lighting: approximate sun reflection
+        const sunDir = Math.sin(time * 0.05) * 0.3;
+        const specular = Math.max(0, slope.dx * sunDir + slope.dz * 0.5);
+        const specPow = Math.pow(specular, 3) * (1 - distFog * 0.5);
+
+        // Character selection based on slope and distance
+        let ch;
+        const isNearCrest = h > 0.8 && slope.dz < -0.2;
+        const isBreaking = h > 1.2 && slopeMag > 0.8 && worldZ < 20;
+
+        if (isBreaking) {
+          const i = Math.floor(Math.abs(h * 10 + worldX * 3 + time * 4));
+          ch = FOAM_CHARS[i % FOAM_CHARS.length];
+        } else if (isNearCrest) {
+          const i = Math.floor(Math.abs(worldX * 2 + time * 3));
+          ch = CREST_CHARS[i % CREST_CHARS.length];
+        } else if (distFog > 0.7) {
+          // Far away: very flat
+          const i = Math.floor(Math.abs(worldX * 0.5 + worldZ * 0.3 + time));
+          ch = slopeMag > 0.3 ? GENTLE_CHARS[i % GENTLE_CHARS.length]
+                               : FLAT_CHARS[i % FLAT_CHARS.length];
+        } else if (slopeMag > 0.7) {
+          const i = Math.floor(Math.abs(h * 8 + worldX * 2 + time * 3));
+          ch = STEEP_CHARS[i % STEEP_CHARS.length];
+        } else if (slopeMag > 0.3) {
+          const i = Math.floor(Math.abs(h * 6 + worldX + time * 2));
+          ch = MEDIUM_CHARS[i % MEDIUM_CHARS.length];
+        } else {
+          const i = Math.floor(Math.abs(h * 4 + worldX * 0.5 + time));
+          ch = slopeMag > 0.15 ? GENTLE_CHARS[i % GENTLE_CHARS.length]
+                                : FLAT_CHARS[i % FLAT_CHARS.length];
+        }
+
+        // Color: blend between deep and bright based on height + specular
+        let baseColor;
+        const heightNorm = (h + 2) / 4; // normalize roughly to 0-1
+        if (heightNorm > 0.7) {
+          baseColor = lerpColor(WATER_LIGHT, WATER_BRIGHT, (heightNorm - 0.7) / 0.3);
+        } else if (heightNorm > 0.4) {
+          baseColor = lerpColor(WATER_MID, WATER_LIGHT, (heightNorm - 0.4) / 0.3);
+        } else {
+          baseColor = lerpColor(WATER_DEEP, WATER_MID, heightNorm / 0.4);
+        }
+
+        // Add specular highlights
+        if (specPow > 0.1) {
+          baseColor = lerpColor(baseColor, WHITE, specPow * 0.6);
+        }
+
+        // Foam on crests
+        if (isBreaking) {
+          baseColor = lerpColor(baseColor, FOAM_COLOR, 0.7);
+        } else if (isNearCrest) {
+          baseColor = lerpColor(baseColor, FOAM_COLOR, 0.4);
+        }
+
+        // Distance fog towards dark horizon color
+        const fogColor = [12, 25, 50];
+        baseColor = lerpColor(baseColor, fogColor, distFog * 0.75);
+
+        // Moon reflection on water
+        const moonReflX = COLS * 0.75;
+        const reflDist = Math.abs(col - moonReflX);
+        const reflWidth = 3 + worldZ * 0.15;
+        if (reflDist < reflWidth) {
+          const reflStrength = (1 - reflDist / reflWidth) * (0.2 + 0.15 * Math.sin(worldZ * 0.5 + time));
+          const shimmer = Math.sin(worldX * 2 + worldZ * 0.8 + time * 2) * 0.5 + 0.5;
+          baseColor = lerpColor(baseColor, [200, 200, 180], reflStrength * shimmer * 0.6);
+          if (reflStrength * shimmer > 0.25 && reflDist < reflWidth * 0.5) {
+            ch = shimmer > 0.6 ? '|' : ':';
+          }
+        }
+
+        lineChars.push({ ch, color: baseColor });
+      }
     }
-    if (currentColor !== null) span += '</span>';
+
+    // Build HTML spans with color runs
+    let prevColor = null;
+    let span = '';
+    for (const { ch, color } of lineChars) {
+      const css = `color:rgb(${color[0]},${color[1]},${color[2]})`;
+      if (!prevColor || prevColor[0] !== color[0] || prevColor[1] !== color[1] || prevColor[2] !== color[2]) {
+        if (prevColor) span += '</span>';
+        span += `<span style="${css}">`;
+        prevColor = color;
+      }
+      span += ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === '&' ? '&amp;' : ch;
+    }
+    if (prevColor) span += '</span>';
     html += span + '\n';
   }
 
@@ -215,7 +264,7 @@ function render(time) {
 }
 
 function loop() {
-  t += 0.04;
+  t += 0.035;
   render(t);
   requestAnimationFrame(loop);
 }

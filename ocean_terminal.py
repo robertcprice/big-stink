@@ -1,113 +1,184 @@
 #!/usr/bin/env python3
-"""ASCII ocean wave animation for the terminal."""
+"""3D perspective ASCII ocean - raycasted view looking out over water."""
 import math, time, os, sys, signal
 
-COLS = min(os.get_terminal_size().columns, 110)
-ROWS = min(os.get_terminal_size().lines - 2, 34)
+COLS = min(os.get_terminal_size().columns, 120)
+ROWS = min(os.get_terminal_size().lines - 1, 45)
+HORIZON = int(ROWS * 0.38)
+CAM_HEIGHT = 3.0
+FOCAL = 60.0
 
-DEEP   = [' ', ' ', '.', '·']
-MID    = ['~', '~', '-', '≈']
-SURF   = ['≈', '≋', '∽', '∿', '~']
-FOAM   = ["'", '"', '`', '*', '°', '˚']
-WASH   = ['.', ',', '·', ':', ';', "'"]
-SAND   = ['▓', '▒', '░']
+C_RESET = '\033[0m'
+C_HIDE  = '\033[?25l'
+C_SHOW  = '\033[?25h'
 
-# ANSI 256-color codes
-C_BG     = '\033[48;2;10;10;26m'
-C_RESET  = '\033[0m'
-C_HIDE   = '\033[?25l'
-C_SHOW   = '\033[?25h'
-
-def rgb(r, g, b):
+def rgb_fg(r, g, b):
     return f'\033[38;2;{r};{g};{b}m'
 
-DEEP_C  = [rgb(11,37,69),  rgb(13,48,96),  rgb(15,59,122)]
-MID_C   = [rgb(26,90,138), rgb(32,112,160), rgb(40,136,187)]
-SURF_C  = [rgb(58,159,216), rgb(80,176,232), rgb(106,196,240)]
-FOAM_C  = [rgb(200,230,245), rgb(223,240,250), rgb(255,255,255)]
-WASH_C  = [rgb(138,184,208), rgb(160,204,224), rgb(184,221,239)]
-SAND_C  = [rgb(194,168,120), rgb(184,152,96), rgb(212,188,138)]
-STAR_C  = rgb(68, 85, 102)
+def rgb_bg(r, g, b):
+    return f'\033[48;2;{r};{g};{b}m'
+
+def lerp(a, b, t):
+    t = max(0.0, min(1.0, t))
+    return a + (b - a) * t
+
+def lerp_c(c1, c2, t):
+    t = max(0.0, min(1.0, t))
+    return (int(lerp(c1[0], c2[0], t)),
+            int(lerp(c1[1], c2[1], t)),
+            int(lerp(c1[2], c2[2], t)))
+
+# Palettes
+SKY_TOP   = (5, 5, 20)
+SKY_MID   = (15, 20, 50)
+SKY_HOR   = (40, 55, 85)
+W_DEEP    = (8, 30, 60)
+W_MID     = (20, 70, 120)
+W_LIGHT   = (50, 140, 200)
+W_BRIGHT  = (100, 190, 240)
+FOAM_C    = (210, 235, 250)
+WHITE     = (255, 255, 255)
+FOG_C     = (12, 25, 50)
+
+FLAT    = [' ', ' ', '.', '\u00b7', ' ', '.']
+GENTLE  = ['~', '~', '-', '~', '\u2248', '-']
+MEDIUM  = ['\u2248', '\u223f', '~', '\u2248', '\u223d', '\u224b']
+STEEP   = ['\u2593', '\u2592', '\u2591', '\u2588', '\u2593', '\u2592']
+CREST   = ["'", '"', '`', '^', '\u00b0', '*']
+FOAM    = ['\u2591', '\u2592', '\u00b7', ':', '.', "'"]
 
 def pick(arr, i):
     return arr[abs(int(i)) % len(arr)]
 
-def noise(x, y, t):
-    v  = math.sin(x * 0.07 + t * 0.6)
-    v += math.sin(x * 0.13 - t * 0.4 + y * 0.1) * 0.7
-    v += math.sin(x * 0.21 + t * 0.9 + y * 0.05) * 0.4
-    v += math.sin(y * 0.3 + t * 0.3) * 0.5
-    v += math.sin((x + y) * 0.05 + t * 0.2) * 0.8
-    return v
+def wave_h(wx, wz, t):
+    h  = math.sin(wz * 0.4 + t * 0.8)
+    h += math.sin(wz * 0.15 + wx * 0.05 + t * 0.5) * 0.6
+    h += math.sin(wx * 0.3 + wz * 0.2 - t * 0.6) * 0.35
+    h += math.sin(wx * 0.12 - t * 0.3) * 0.2
+    h += math.sin(wx * 0.8 + wz * 0.9 + t * 1.5) * 0.15
+    h += math.sin(wx * 1.5 - wz * 0.7 + t * 2.0) * 0.08
+    return h
+
+def wave_slope(wx, wz, t):
+    e = 0.3
+    dx = (wave_h(wx + e, wz, t) - wave_h(wx - e, wz, t)) / (2 * e)
+    dz = (wave_h(wx, wz + e, t) - wave_h(wx, wz - e, t)) / (2 * e)
+    return dx, dz
 
 def render(t):
     buf = []
-    shore_base = ROWS * 0.78
-    shore_wave = math.sin(t * 0.15) * 2
-
-    for y in range(ROWS):
+    for row in range(ROWS):
         line = []
-        for x in range(COLS):
-            n = noise(x, y, t)
-            shore_off = math.sin(x * 0.05 + t * 0.2) * 3 + shore_wave
-            shore_y = shore_base + shore_off
-            wash_ext = math.sin(t * 0.3 + x * 0.04) * 2.5 + math.sin(t * 0.7) * 1.5
-            wash_y = shore_y + wash_ext + 1
-
-            if y < ROWS * 0.08:
-                s = math.sin(x * 7.7 + y * 13.3 + t * 0.1)
-                if s > 0.97:
-                    line.append(STAR_C + '.')
-                else:
-                    line.append(' ')
-            elif y < ROWS * 0.15:
-                hn = math.sin(x * 0.1 + t * 0.3) + math.sin(x * 0.23 - t * 0.2) * 0.5
-                if hn > 0.8:
-                    line.append(pick(DEEP_C, x) + pick(MID, x + int(t * 2)))
-                else:
-                    line.append(pick(DEEP_C, int(n * 3)) + pick(DEEP, int(n * 10 + x)))
-            elif y < ROWS * 0.4:
-                intensity = n * 0.5 + 0.5
-                if intensity > 0.75:
-                    line.append(pick(MID_C, int(n * 5)) + pick(MID, int(n * 10 + x + t * 3)))
-                elif intensity > 0.4:
-                    line.append(pick(DEEP_C, int(n * 4)) + pick(DEEP, int(n * 8 + x)))
-                else:
-                    line.append(' ')
-            elif y < shore_y - 4:
-                intensity = n * 0.5 + 0.5
-                if intensity > 0.7:
-                    line.append(pick(SURF_C, int(n * 5)) + pick(SURF, int(n * 10 + x + t * 5)))
-                elif intensity > 0.35:
-                    line.append(pick(MID_C, int(n * 4)) + pick(MID, int(n * 8 + x + t * 3)))
-                else:
-                    line.append(pick(DEEP_C, int(n * 3)) + pick(DEEP, int(n * 6 + x)))
-            elif y < shore_y:
-                sn = noise(x * 1.5, y, t * 1.4)
-                bp = math.sin(x * 0.08 + t * 0.8 - y * 0.3)
-                close = 1 - (shore_y - y) / 4
-                if bp > 0.3 and close > 0.4:
-                    line.append(pick(FOAM_C, int(sn * 4)) + pick(FOAM, int(sn * 10 + t * 6)))
-                elif sn > 0:
-                    line.append(pick(SURF_C, int(sn * 5)) + pick(SURF, int(sn * 10 + x + t * 4)))
-                else:
-                    line.append(pick(MID_C, int(sn * 3 + 1)) + pick(MID, int(sn * 6 + x)))
-            elif y < wash_y:
-                wn = noise(x * 1.2, y * 2, t * 1.2)
-                fade = 1 - (y - shore_y) / max(wash_y - shore_y, 0.01)
-                if fade > 0.5 and wn > -0.3:
-                    line.append(pick(WASH_C, int(wn * 3 + fade * 2)) + pick(WASH, int(wn * 10 + t * 4)))
-                elif fade > 0.2:
-                    line.append(pick(WASH_C, 2) + pick(['.', ' ', '·', ' '], int(wn * 5 + x)))
-                else:
-                    line.append(pick(SAND_C, int(x * 0.2)) + pick(SAND, int(x * 0.3 + y)))
+        if row <= HORIZON:
+            # Sky
+            st = row / max(HORIZON, 1)
+            if st < 0.5:
+                sc = lerp_c(SKY_TOP, SKY_MID, st * 2)
             else:
-                sn = math.sin(x * 0.5 + y * 0.8) * 0.5 + 0.5
-                line.append(pick(SAND_C, int(sn * 3 + y)) + pick(SAND, int(sn * 3)))
+                sc = lerp_c(SKY_MID, SKY_HOR, (st - 0.5) * 2)
 
-        buf.append(''.join(line))
+            for col in range(COLS):
+                ch = ' '
+                color = sc
+                # Stars
+                seed = math.sin(col * 127.1 + row * 311.7) * 43758.5453
+                sv = seed - math.floor(seed)
+                if sv > 0.992 and st < 0.7:
+                    tw = math.sin(t * 0.5 + col * 3.7 + row * 2.3) * 0.5 + 0.5
+                    br = int(80 + tw * 120)
+                    ch = '*' if sv > 0.997 else '.'
+                    color = (br, br, min(255, br + 40))
+                # Moon
+                mx, my = COLS * 0.75, HORIZON * 0.25
+                md = math.sqrt((col - mx)**2 + (row - my)**2)
+                if md < 2:
+                    ch = 'O' if md < 1 else '\u00b7'
+                    color = (220, 220, 200)
+                elif md < 10:
+                    g = 1 - md / 10
+                    color = lerp_c(sc, (60, 60, 80), g * 0.4)
+                # Horizon glow
+                if row >= HORIZON - 2:
+                    gt = 1 - (HORIZON - row) / 2
+                    hg = math.sin(col * 0.05 + t * 0.1) * 0.1 + 0.15
+                    color = lerp_c(color, (60, 70, 100), gt * hg)
+                line.append((ch, color))
+        else:
+            # Water - 3D perspective
+            sd = row - HORIZON
+            wz = (CAM_HEIGHT * FOCAL) / sd
+            ps = wz / FOCAL
+            for col in range(COLS):
+                wx = (col - COLS / 2) * ps
+                h = wave_h(wx, wz, t)
+                dx, dz = wave_slope(wx, wz, t)
+                sm = math.sqrt(dx * dx + dz * dz)
+                df = min(1.0, wz / 80)
+                sun = math.sin(t * 0.05) * 0.3
+                spec = max(0, dx * sun + dz * 0.5)
+                sp = (spec ** 3) * (1 - df * 0.5)
 
-    return '\n'.join(buf) + C_RESET
+                near_crest = h > 0.8 and dz < -0.2
+                breaking = h > 1.2 and sm > 0.8 and wz < 20
+
+                if breaking:
+                    ch = pick(FOAM, h * 10 + wx * 3 + t * 4)
+                elif near_crest:
+                    ch = pick(CREST, wx * 2 + t * 3)
+                elif df > 0.7:
+                    i = h * 4 + wx * 0.5 + t
+                    ch = pick(GENTLE, i) if sm > 0.3 else pick(FLAT, i)
+                elif sm > 0.7:
+                    ch = pick(STEEP, h * 8 + wx * 2 + t * 3)
+                elif sm > 0.3:
+                    ch = pick(MEDIUM, h * 6 + wx + t * 2)
+                else:
+                    i = h * 4 + wx * 0.5 + t
+                    ch = pick(GENTLE, i) if sm > 0.15 else pick(FLAT, i)
+
+                hn = (h + 2) / 4
+                if hn > 0.7:
+                    bc = lerp_c(W_LIGHT, W_BRIGHT, (hn - 0.7) / 0.3)
+                elif hn > 0.4:
+                    bc = lerp_c(W_MID, W_LIGHT, (hn - 0.4) / 0.3)
+                else:
+                    bc = lerp_c(W_DEEP, W_MID, hn / 0.4)
+
+                if sp > 0.1:
+                    bc = lerp_c(bc, WHITE, sp * 0.6)
+                if breaking:
+                    bc = lerp_c(bc, FOAM_C, 0.7)
+                elif near_crest:
+                    bc = lerp_c(bc, FOAM_C, 0.4)
+                bc = lerp_c(bc, FOG_C, df * 0.75)
+
+                # Moon reflection
+                mrx = COLS * 0.75
+                rd = abs(col - mrx)
+                rw = 3 + wz * 0.15
+                if rd < rw:
+                    rs = (1 - rd / rw) * (0.2 + 0.15 * math.sin(wz * 0.5 + t))
+                    sh = math.sin(wx * 2 + wz * 0.8 + t * 2) * 0.5 + 0.5
+                    bc = lerp_c(bc, (200, 200, 180), rs * sh * 0.6)
+                    if rs * sh > 0.25 and rd < rw * 0.5:
+                        ch = '|' if sh > 0.6 else ':'
+
+                line.append((ch, bc))
+        buf.append(line)
+    return buf
+
+def frame_to_str(buf):
+    out = []
+    for line in buf:
+        parts = []
+        pc = None
+        for ch, c in line:
+            if c != pc:
+                parts.append(rgb_fg(c[0], c[1], c[2]))
+                pc = c
+            parts.append(ch)
+        out.append(''.join(parts))
+    return '\n'.join(out) + C_RESET
 
 def cleanup(*_):
     sys.stdout.write(C_SHOW + C_RESET + '\033[2J\033[H')
@@ -121,12 +192,13 @@ sys.stdout.write(C_HIDE + '\033[2J')
 sys.stdout.flush()
 
 t = 0.0
+BG = rgb_bg(0, 0, 0)
 try:
     while True:
         frame = render(t)
-        sys.stdout.write('\033[H' + C_BG + frame)
+        sys.stdout.write('\033[H' + BG + frame_to_str(frame))
         sys.stdout.flush()
-        t += 0.06
-        time.sleep(0.045)
+        t += 0.05
+        time.sleep(0.04)
 except KeyboardInterrupt:
     cleanup()
