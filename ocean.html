@@ -19,7 +19,7 @@
     font-size: 13px;
     line-height: 1.1;
     white-space: pre;
-    letter-spacing: 1px;
+    letter-spacing: 0;
     user-select: none;
   }
 </style>
@@ -84,13 +84,13 @@ const WATER_BRIGHT = [100, 190, 240];
 const FOAM_COLOR   = [210, 235, 250];
 const WHITE        = [255, 255, 255];
 
-// Characters by "energy" / slope
-const FLAT_CHARS    = [' ', ' ', '.', '·', ' ', '.'];
-const GENTLE_CHARS  = ['~', '~', '-', '~', '≈', '-'];
-const MEDIUM_CHARS  = ['≈', '∿', '~', '≈', '∽', '≋'];
-const STEEP_CHARS   = ['▓', '▒', '░', '█', '▓', '▒'];
-const CREST_CHARS   = ["'", '"', '`', '^', '°', '*'];
-const FOAM_CHARS    = ['░', '▒', '·', ':', '.', "'"];
+// Characters by "energy" / slope (ASCII only to prevent jitter)
+const FLAT_CHARS    = [' ', ' ', '.', '.', ' ', '.'];
+const GENTLE_CHARS  = ['~', '~', '-', '~', '=', '-'];
+const MEDIUM_CHARS  = ['=', '~', '~', '=', '-', '~'];
+const STEEP_CHARS   = ['#', '%', '=', '#', '%', '='];
+const CREST_CHARS   = ["'", '"', '`', '^', '*', '*'];
+const FOAM_CHARS    = [';', ':', '.', ':', '.', "'"];
 
 let t = 0;
 
@@ -128,7 +128,7 @@ function render(time) {
         const moonX = COLS * 0.75, moonY = HORIZON * 0.25;
         const moonDist = Math.sqrt((col - moonX) ** 2 + (row - moonY) ** 2);
         if (moonDist < 2) {
-          ch = moonDist < 1 ? 'O' : '·';
+          ch = moonDist < 1 ? 'O' : '.';
           color = [220, 220, 200];
         } else if (moonDist < 10) {
           const glow = 1 - moonDist / 10;
